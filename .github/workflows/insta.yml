@@ -3,12 +3,15 @@ on:
   workflow_dispatch:
     inputs:
       target_url:
+        description: "Reel/Post URL"
         required: true
       chat_id:
+        description: "Telegram Chat ID"
         required: true
-      # 👇 Ab yahan sirf 1 hi input dena hai
       cookie:
+        description: "Base64 Cookies (Comma se ya alag-alag lines me dalo)"
         required: true
+        type: string
 
 jobs:
   run-bot:
@@ -54,7 +57,7 @@ jobs:
         env:
           TARGET_URL: ${{ github.event.inputs.target_url }}
           CHAT_ID: ${{ github.event.inputs.chat_id }}
-          # 👇 Ab sirf ek cookie jayegi python script ko
+          # 👇 Yahan cookies fetch ho jayengi, chahe user 10 hi kyon na daal de
           COOKIE: ${{ github.event.inputs.cookie }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
         run: python worker.py
