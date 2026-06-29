@@ -6,6 +6,7 @@ import json
 import time
 import random
 import requests
+import hashlib # Naya import add kiya hai unique ID ke liye
 
 TARGET_URL = os.environ.get("TARGET_URL")
 CHAT_ID = os.environ.get("CHAT_ID")
@@ -25,7 +26,6 @@ async def send_screenshot(image_path, text):
     await asyncio.to_thread(_upload)
 
 def get_or_assign_device(cookie_id, p):
-    # 1. Purana cache load karo
     device_map = {}
     if os.path.exists(DEVICE_MAP_FILE):
         try:
@@ -33,23 +33,18 @@ def get_or_assign_device(cookie_id, p):
                 device_map = json.load(f)
         except: pass
 
-    # 2. Check agar cache mein valid device hai
     if cookie_id in device_map:
         assigned_device = device_map[cookie_id]
-        # VALIDITY CHECK: agar landscape/tablet hai, toh use reject karo
         if assigned_device in p.devices and 'landscape' not in assigned_device.lower() and 'tablet' not in assigned_device.lower():
             return assigned_device
 
-    # 3. Naya valid device chuno
     all_devices = list(p.devices.keys())
-    # STRICT FILTER: Portrait mobiles only
     valid_devices = [d for d in all_devices 
                      if any(k in d for k in ['iPhone', 'Pixel', 'Samsung', 'Galaxy']) 
                      and 'landscape' not in d.lower() 
                      and 'tablet' not in d.lower()
                      and 'fold' not in d.lower()]
     
-    # ⚡ Collision avoid karne ke liye random sleep
     time.sleep(random.uniform(0.5, 3.0)) 
     
     assigned_device = random.choice(valid_devices) if valid_devices else "iPhone 13"
@@ -64,14 +59,14 @@ def get_or_assign_device(cookie_id, p):
 async def process_account(browser, cookie_b64, p):
     if not cookie_b64: return
     
-    cookie_unique_id = cookie_b64[:30] 
+    # FIX 1: Base64 ke starting chars ki jagah MD5 hash banaya hai taaki har cookie ka unique id bane
+    cookie_unique_id = hashlib.md5(cookie_b64.encode('utf-8')).hexdigest()
+    
     device_name = get_or_assign_device(cookie_unique_id, p)
     device_profile = p.devices[device_name]
     
-    # Context setup
     context = await browser.new_context(**device_profile)
     
-    # Cookies inject karo
     cookie_str = base64.b64decode(cookie_b64).decode()
     cookies = json.loads(cookie_str)
     cleaned_cookies = []
@@ -94,7 +89,6 @@ async def process_account(browser, cookie_b64, p):
         await asyncio.sleep(random.randint(15, 45))
         current_comment = random.choice(COMMENTS_LIST)
         
-        # Action Logic (Simpler)
         async def do_action(label):
             await page.evaluate(f"(() => {{ let s = document.querySelectorAll('svg[aria-label=\"{label}\"]'); if(s.length>0) s[0].closest('div[role=\"button\"]')?.click(); }})();")
             await asyncio.sleep(1)
@@ -105,7 +99,6 @@ async def process_account(browser, cookie_b64, p):
             await act()
             await asyncio.sleep(random.uniform(1, 3))
 
-        # Screenshot Logic
         elapsed = time.time() - start_time
         if elapsed < 75: await asyncio.sleep(75 - elapsed)
         
@@ -117,10 +110,11 @@ async def process_account(browser, cookie_b64, p):
 
 async def main():
     async with async_playwright() as p:
+        # FIX 2: "--start-maximized" ko hara diya gaya hai taaki mobile view landscape na bane
         browser = await p.chromium.launch(
             channel="chrome", 
             headless=True, 
-            args=["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-dev-shm-usage"]
+            args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-dev-shm-usage"]
         )
         if COOKIE_B64: await process_account(browser, COOKIE_B64, p)
         await browser.close()
