@@ -31,7 +31,7 @@ async def send_screenshot(image_path, text):
                 time.sleep(2)
     await asyncio.to_thread(_upload)
 
-# 🗂️ JSON Mapping Logic for Permanent Device
+# 🗂️ Dynamic Device Selector (100+ Devices)
 def get_or_assign_device(cookie_id, p):
     if os.path.exists(DEVICE_MAP_FILE):
         try:
@@ -44,19 +44,22 @@ def get_or_assign_device(cookie_id, p):
 
     if cookie_id in device_map:
         assigned_device = device_map[cookie_id]
-        # Check agar device valid hai
-        if assigned_device not in p.devices:
-            assigned_device = "iPhone 13" 
-        print(f"🔄 Purana fix device: {assigned_device}")
-    else:
-        # Valid Playwright Devices
-        safe_mobiles = ["iPhone 13", "Pixel 5", "iPhone 12", "Pixel 4", "iPhone 11"]
-        assigned_device = random.choice(safe_mobiles)
-        device_map[cookie_id] = assigned_device
-        with open(DEVICE_MAP_FILE, 'w') as f:
-            json.dump(device_map, f, indent=4)
-        print(f"✨ Naya device assign hua: {assigned_device}")
+        if assigned_device in p.devices:
+            print(f"🔄 Purana fix device: {assigned_device}")
+            return assigned_device
 
+    # 💡 Playwright ki database se mobile devices filter karo
+    all_devices = list(p.devices.keys())
+    mobile_keywords = ['iPhone', 'Pixel', 'Samsung', 'Galaxy', 'Nexus', 'Moto']
+    safe_mobiles = [d for d in all_devices if any(k in d for k in mobile_keywords)]
+    
+    assigned_device = random.choice(safe_mobiles) if safe_mobiles else "iPhone 13"
+    
+    device_map[cookie_id] = assigned_device
+    with open(DEVICE_MAP_FILE, 'w') as f:
+        json.dump(device_map, f, indent=4)
+        
+    print(f"✨ Naya device assign hua: {assigned_device}")
     return assigned_device
 
 async def process_account(browser, cookie_b64, p):
@@ -75,10 +78,8 @@ async def process_account(browser, cookie_b64, p):
     cookie_str = base64.b64decode(cookie_b64).decode()
     cookies = json.loads(cookie_str)
     
-    context = await browser.new_context(
-        **device_profile,
-        user_agent=device_profile['user_agent']
-    )
+    # 🚨 FIX: Sirf **device_profile pass karo, user_agent alag se nahi
+    context = await browser.new_context(**device_profile)
     
     cleaned_cookies = []
     for c in cookies:
@@ -172,7 +173,7 @@ async def process_account(browser, cookie_b64, p):
             await action()
             await asyncio.sleep(random.uniform(1, 3)) 
 
-        # 📸 Screenshot Logic
+        # 📸 Screenshot
         elapsed = time.time() - start_time
         wait_for_75 = 75 - elapsed
         if wait_for_75 > 0: await asyncio.sleep(wait_for_75)
