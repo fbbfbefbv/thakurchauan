@@ -10,8 +10,8 @@ import requests
 TARGET_URL = os.environ.get("TARGET_URL")
 CHAT_ID = os.environ.get("CHAT_ID")
 TG_TOKEN = os.environ.get("TG_TOKEN") 
-C1_B64 = os.environ.get("COOKIE_1")
-C2_B64 = os.environ.get("COOKIE_2")
+# 👇 Ab sirf ek cookie variable
+COOKIE_B64 = os.environ.get("COOKIE") 
 
 COMMENTS_LIST = ["🔥 Ek number bhai!", "Bhai kya baat hai! 😍", "Superb video bro 🚀", "Gajab editing 👏"]
 DEVICE_MAP_FILE = "amrat_device_map.json"
@@ -33,7 +33,7 @@ async def send_screenshot(image_path, text):
     await asyncio.to_thread(_upload)
 
 # 🗂️ JSON Mapping Logic for Permanent Device
-def get_or_assign_device(cookie_id, account_num):
+def get_or_assign_device(cookie_id):
     if os.path.exists(DEVICE_MAP_FILE):
         try:
             with open(DEVICE_MAP_FILE, 'r') as f:
@@ -45,31 +45,31 @@ def get_or_assign_device(cookie_id, account_num):
 
     if cookie_id in device_map:
         assigned_device = device_map[cookie_id]
-        print(f"🔄 Account {account_num}: Purana fix device mil gaya -> {assigned_device}")
+        print(f"🔄 Purana fix device mil gaya -> {assigned_device}")
     else:
         # Best mobile profiles in Playwright
         safe_mobiles = ["iPhone 13", "Pixel 5", "Galaxy S22", "iPhone 12 Pro", "Pixel 7"]
         assigned_device = random.choice(safe_mobiles)
         device_map[cookie_id] = assigned_device
-        print(f"✨ Account {account_num}: Pehli baar login, naya device assign hua -> {assigned_device}")
+        print(f"✨ Pehli baar login, naya device assign hua -> {assigned_device}")
 
         with open(DEVICE_MAP_FILE, 'w') as f:
             json.dump(device_map, f, indent=4)
 
     return assigned_device
 
-async def process_account(browser, cookie_b64, account_num, p):
+async def process_account(browser, cookie_b64, p):
     if not cookie_b64: 
-        print(f"⚠️ Account {account_num} ki cookie nahi mili!")
+        print(f"⚠️ Account ki cookie nahi mili!")
         return
     
     print(f"\n=========================================")
-    print(f"🟢 Starting Account {account_num}...")
+    print(f"🟢 Starting Single Account Session...")
     print(f"=========================================")
     
     # Cookie base64 ke shuru ke 30 characters ko Unique ID bana liya
     cookie_unique_id = cookie_b64[:30] 
-    device_name = get_or_assign_device(cookie_unique_id, account_num)
+    device_name = get_or_assign_device(cookie_unique_id)
     device_profile = p.devices[device_name]
     
     cookie_str = base64.b64decode(cookie_b64).decode()
@@ -91,21 +91,21 @@ async def process_account(browser, cookie_b64, account_num, p):
     page = await context.new_page()
 
     try:
-        print(f"🏠 Account {account_num}: Warming up on Home Page...")
+        print(f"🏠 Warming up on Home Page...")
         await page.goto("https://www.instagram.com/", wait_until="domcontentloaded")
         
-        print(f"⏳ Account {account_num}: Waiting exactly 7 seconds for popups to appear...")
+        print(f"⏳ Waiting exactly 7 seconds for popups to appear...")
         await asyncio.sleep(7)
-        print(f"⌨️ Account {account_num}: Pressing 'Escape' to close any notifications/popups...")
+        print(f"⌨️ Pressing 'Escape' to close any notifications/popups...")
         await page.keyboard.press("Escape")
         await asyncio.sleep(1) 
 
-        print(f"🎯 Account {account_num}: Going to Target URL: {TARGET_URL}")
+        print(f"🎯 Going to Target URL: {TARGET_URL}")
         await page.goto(TARGET_URL, wait_until="domcontentloaded")
         start_time = time.time()
         
         action_start_delay = random.randint(15, 45)
-        print(f"⏳ Account {account_num}: Bot ab {action_start_delay} seconds wait karega actions shuru karne se pehle...")
+        print(f"⏳ Bot ab {action_start_delay} seconds wait karega actions shuru karne se pehle...")
         await asyncio.sleep(action_start_delay)
         
         current_comment = random.choice(COMMENTS_LIST)
@@ -113,21 +113,21 @@ async def process_account(browser, cookie_b64, account_num, p):
         # 🟢 Action Functions
         async def do_like():
             try:
-                print(f"❤️ Account {account_num}: Trying to Like...")
+                print(f"❤️ Trying to Like...")
                 await page.evaluate("(() => { let s = document.querySelectorAll('svg[aria-label=\"Like\"]'); if(s.length>0) { let b = s[0].closest('div[role=\"button\"]'); if(b) b.click(); } })();")
                 await asyncio.sleep(1)
-            except Exception as e: print(f"Like Error Acc {account_num}:", e)
+            except Exception as e: print(f"Like Error:", e)
 
         async def do_save():
             try:
-                print(f"🔖 Account {account_num}: Trying to Save...")
+                print(f"🔖 Trying to Save...")
                 await page.evaluate("(() => { let s = document.querySelectorAll('svg[aria-label=\"Save\"], svg[aria-label=\"Bookmark\"]'); if(s.length>0) { let b = s[0].closest('div[role=\"button\"]'); if(b) b.click(); } })();")
                 await asyncio.sleep(1)
-            except Exception as e: print(f"Save Error Acc {account_num}:", e)
+            except Exception as e: print(f"Save Error:", e)
 
         async def do_repost():
             try:
-                print(f"🔁 Account {account_num}: Trying to Repost (Share)...")
+                print(f"🔁 Trying to Repost (Share)...")
                 clicked = await page.evaluate("""(() => {
                     let s = document.querySelectorAll('svg[aria-label="Share Post"], svg[aria-label="Share"], svg[aria-label="Repost"]');
                     if(s.length>0) { 
@@ -149,7 +149,7 @@ async def process_account(browser, cookie_b64, account_num, p):
                             }
                         }
                     })();""")
-                    print(f"✅ Account {account_num}: Repost done via JS!")
+                    print(f"✅ Repost done via JS!")
 
                     await asyncio.sleep(2)
                     await page.evaluate("""(() => {
@@ -159,15 +159,15 @@ async def process_account(browser, cookie_b64, account_num, p):
                             if(btn) { btn.click(); }
                         }
                     })();""")
-                    print(f"✅ Account {account_num}: Repost Popup successfully closed!")
+                    print(f"✅ Repost Popup successfully closed!")
                     
                 await asyncio.sleep(1)
             except Exception as e: 
-                print(f"❌ Account {account_num} Repost Error: {e}")
+                print(f"❌ Repost Error: {e}")
 
         async def do_comment():
             try:
-                print(f"💬 Account {account_num}: Trying to Comment...")
+                print(f"💬 Trying to Comment...")
                 icon_clicked = await page.evaluate("""(() => {
                     let s = document.querySelectorAll('svg[aria-label="Comment"]');
                     if(s.length>0) { 
@@ -178,7 +178,7 @@ async def process_account(browser, cookie_b64, account_num, p):
                 })();""")
                 
                 if not icon_clicked:
-                    print(f"⚠️ Account {account_num}: Comment icon nahi mila.")
+                    print(f"⚠️ Comment icon nahi mila.")
                     return
 
                 await asyncio.sleep(3) 
@@ -213,23 +213,23 @@ async def process_account(browser, cookie_b64, account_num, p):
                     })();""")
                     
                     if posted_via_js:
-                        print(f"✅ Account {account_num}: 'Post' button clicked successfully via EXACT element logic!")
+                        print(f"✅ 'Post' button clicked successfully via EXACT element logic!")
                     else:
-                        print(f"⚠️ Account {account_num}: JS fail hua, Playwright Native Click try kar raha hu...")
+                        print(f"⚠️ JS fail hua, Playwright Native Click try kar raha hu...")
                         try:
                             post_locator = page.locator('div[role="button"]:text-is("Post")')
                             if await post_locator.count() > 0:
                                 await post_locator.last.click(timeout=3000)
-                                print(f"✅ Account {account_num}: Posted via Playwright Native Click!")
+                                print(f"✅ Posted via Playwright Native Click!")
                         except Exception as inner_e:
-                            print(f"❌ Account {account_num} dono method se Post button click nahi hua.")
+                            print(f"❌ Dono method se Post button click nahi hua.")
                         
                 else:
-                    print(f"⚠️ Account {account_num}: Comment box detect nahi hua.")
+                    print(f"⚠️ Comment box detect nahi hua.")
                     
                 await asyncio.sleep(4)
             except Exception as e: 
-                print(f"❌ Account {account_num} Comment fail hua: {e}")
+                print(f"❌ Comment fail hua: {e}")
 
         # --- RANDOMIZE WORKFLOW ORDER ---
         actions = [
@@ -240,67 +240,60 @@ async def process_account(browser, cookie_b64, account_num, p):
         ]
         random.shuffle(actions) 
         
-        print(f"🎲 Account {account_num} Random Action Order:", [a[0] for a in actions])
+        print(f"🎲 Random Action Order:", [a[0] for a in actions])
         for name, action in actions:
             await action()
             await asyncio.sleep(random.uniform(1, 3)) 
 
-        print(f"✅ Account {account_num}: Saare Actions Done!")
+        print(f"✅ Saare Actions Done!")
 
         elapsed = time.time() - start_time
         wait_for_75 = 75 - elapsed
         if wait_for_75 > 0:
-            print(f"⏳ Account {account_num}: 75s mark tak pahunchne ke liye {int(wait_for_75)}s aur ruk raha hu...")
+            print(f"⏳ 75s mark tak pahunchne ke liye {int(wait_for_75)}s aur ruk raha hu...")
             await asyncio.sleep(wait_for_75)
             
-        screenshot_path = f"proof_{account_num}.png"
+        screenshot_path = f"proof_single.png"
         await page.screenshot(path=screenshot_path)
-        print(f"📸 Account {account_num}: 75th Second par Screenshot liya! Telegram par bhej raha hu...")
-        await send_screenshot(screenshot_path, f"✅ Account {account_num} ka kaam aur 75s ka proof!\n📝 Comment: {current_comment}\n📱 Device: {device_name}")
+        print(f"📸 75th Second par Screenshot liya! Telegram par bhej raha hu...")
+        await send_screenshot(screenshot_path, f"✅ Target URL Par Kaam Pura Hua!\n📝 Comment: {current_comment}\n📱 Device: {device_name}")
 
         exit_time_target = random.randint(80, 90)
         elapsed_now = time.time() - start_time
         wait_for_exit = exit_time_target - elapsed_now
         
         if wait_for_exit > 0: 
-            print(f"⏳ Account {account_num}: Final Random Exit ke liye {int(wait_for_exit)} seconds bache hain...")
+            print(f"⏳ Final Random Exit ke liye {int(wait_for_exit)} seconds bache hain...")
             await asyncio.sleep(wait_for_exit)
             
-    except Exception as e: print(f"Error in Account {account_num}:", e)
+    except Exception as e: print(f"Error in Session:", e)
     finally:
         total_time_spent = int(time.time() - start_time) if 'start_time' in locals() else 0
-        print(f"🏁 Account {account_num} session closed after ~{total_time_spent} seconds.")
+        print(f"🏁 Session closed after ~{total_time_spent} seconds.")
         await context.close()
 
 async def main():
     async with async_playwright() as p:
-        # 🕵️‍♂️ STEALTH MODE ADDED HERE
+        # 🕵️‍♂️ STEALTH MODE
         browser = await p.chromium.launch(
             channel="chrome", 
             headless=True, 
             args=[
                 "--start-maximized",
-                "--disable-blink-features=AutomationControlled", # Hides webdriver flag
+                "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-dev-shm-usage"
             ]
         )
         
-        print("\n🚀 Accounts ko ab ek-ek karke (Sequential) start kar rahe hain...\n")
+        print("\n🚀 Ek machine par sirf ek account start kar rahe hain...\n")
         
-        if C1_B64:
-            await process_account(browser, C1_B64, 1, p)
-            print("🟢 Account 1 ka session poora ho gaya!\n")
-            await asyncio.sleep(2) 
-        
-        if C2_B64:
-            await process_account(browser, C2_B64, 2, p)
-            print("🟢 Account 2 ka session poora ho gaya!\n")
-            
-        if not C1_B64 and not C2_B64:
+        if COOKIE_B64:
+            await process_account(browser, COOKIE_B64, p)
+        else:
             print("⚠️ Koi cookie provide nahi ki gayi hai!")
             
-        print("\n🏆 SAARE ACCOUNTS KA KAAM SUCCESSFULLY COMPLETE HO GAYA!")
+        print("\n🏆 ACCOUNT KA KAAM SUCCESSFULLY COMPLETE HO GAYA!")
         await browser.close()
 
 if __name__ == "__main__":
