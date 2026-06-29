@@ -1,0 +1,53 @@
+name: Insta Bot Worker
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        required: true
+      chat_id:
+        required: true
+      cookie_1:
+        required: true
+      cookie_2:
+        required: false
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.run_id }} 
+    steps:
+      - uses: actions/checkout@v3
+
+      # 👇 DIRECT WARP VPN INSTALLATION (Bina kisi 3rd-party repo ke) 👇
+      - name: Setup Cloudflare WARP VPN Manually
+        run: |
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update
+          sudo apt-get install cloudflare-warp -y
+          warp-cli --accept-tos registration new || warp-cli --accept-tos register
+          warp-cli --accept-tos connect
+          sleep 5
+          curl -s https://ipinfo.io/json
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: |
+          pip install playwright requests python-dotenv
+          # 🚨 Yahan ab sirf asli Chrome install hoga Chromium ki jagah
+          playwright install chrome
+          
+      - name: Run Bot Worker
+        env:
+          TARGET_URL: ${{ github.event.inputs.target_url }}
+          CHAT_ID: ${{ github.event.inputs.chat_id }}
+          COOKIE_1: ${{ github.event.inputs.cookie_1 }}
+          COOKIE_2: ${{ github.event.inputs.cookie_2 }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+        # 🚨 Script run command ko tumhare actual file name ke hisaab se update kiya
+        run: python worker.py
