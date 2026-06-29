@@ -53,30 +53,30 @@ def get_or_assign_device(cookie_id, p):
     with open(DEVICE_MAP_FILE, 'w') as f:
         json.dump(device_map, f, indent=4)
         
-    print(f"✨ Assigned mobile device: {assigned_device}")
     return assigned_device
 
-async def process_account(browser, cookie_b64, p):
+async def process_account(browser, cookie_b64, p, account_num):
     if not cookie_b64: return
     
     cookie_unique_id = hashlib.md5(cookie_b64.encode('utf-8')).hexdigest()
     device_name = get_or_assign_device(cookie_unique_id, p)
     device_profile = p.devices[device_name]
     
+    print(f"🚀 [Account {account_num}] Launching with device: {device_name}")
     context = await browser.new_context(**device_profile)
     
-    cookie_str = base64.b64decode(cookie_b64).decode()
-    cookies = json.loads(cookie_str)
-    cleaned_cookies = []
-    for c in cookies:
-        if 'sameSite' in c and c['sameSite'] not in ['Strict', 'Lax', 'None']: c['sameSite'] = 'Lax'
-        if 'id' in c: del c['id']
-        cleaned_cookies.append(c)
-    await context.add_cookies(cleaned_cookies)
-    
-    page = await context.new_page()
-
     try:
+        cookie_str = base64.b64decode(cookie_b64).decode()
+        cookies = json.loads(cookie_str)
+        cleaned_cookies = []
+        for c in cookies:
+            if 'sameSite' in c and c['sameSite'] not in ['Strict', 'Lax', 'None']: c['sameSite'] = 'Lax'
+            if 'id' in c: del c['id']
+            cleaned_cookies.append(c)
+        await context.add_cookies(cleaned_cookies)
+        
+        page = await context.new_page()
+        
         await page.goto("https://www.instagram.com/", wait_until="domcontentloaded")
         await asyncio.sleep(7)
         await page.keyboard.press("Escape")
@@ -87,8 +87,10 @@ async def process_account(browser, cookie_b64, p):
         await asyncio.sleep(random.randint(15, 45))
         
         async def do_action(label):
-            await page.evaluate(f"(() => {{ let s = document.querySelectorAll('svg[aria-label=\"{label}\"]'); if(s.length>0) s[0].closest('div[role=\"button\"]')?.click(); }})();")
-            await asyncio.sleep(1)
+            try:
+                await page.evaluate(f"(() => {{ let s = document.querySelectorAll('svg[aria-label=\"{label}\"]'); if(s.length>0) s[0].closest('div[role=\"button\"]')?.click(); }})();")
+                await asyncio.sleep(1)
+            except: pass
 
         actions = [lambda: do_action("Like"), lambda: do_action("Save"), lambda: do_action("Comment")]
         random.shuffle(actions)
@@ -99,10 +101,17 @@ async def process_account(browser, cookie_b64, p):
         elapsed = time.time() - start_time
         if elapsed < 75: await asyncio.sleep(75 - elapsed)
         
-        await page.screenshot(path="proof.png")
-        # Telegram msg me ID add ki hai taaki pata chale kaunsi ID hui hai
-        await send_screenshot("proof.png", f"✅ Done! (ID: {cookie_unique_id[:6]})\n📱 Device: {device_name}")
+        # Screenshot unique naam se save hogi taaki parallel chalte waqt mix na ho
+        screenshot_path = f"proof_{account_num}.png"
+        await page.screenshot(path=screenshot_path)
+        await send_screenshot(screenshot_path, f"✅ Done! (Account {account_num})\n📱 Device: {device_name}")
         
+        # Clean up screenshot file
+        if os.path.exists(screenshot_path): os.remove(screenshot_path)
+        print(f"✅ [Account {account_num}] Finished successfully!")
+        
+    except Exception as e:
+        print(f"⚠️ [Account {account_num}] Error: {e}")
     finally:
         await context.close()
 
@@ -111,34 +120,41 @@ async def main():
         print("❌ No cookies provided!")
         return
         
-    # User ne jitni bhi cookies di hongi (comma ya new line se alag), sabko list banayega
     raw_cookies = COOKIES_INPUT.replace('\\n', ',').replace('\n', ',').split(',')
     cookies_list = [c.strip() for c in raw_cookies if c.strip()]
     
-    print(f"🔥 Total {len(cookies_list)} accounts found. Running them one by one...")
+    print(f"🔥 Total {len(cookies_list)} accounts ready for staggered parallel run...")
 
     async with async_playwright() as p:
+        # Ek hi browser share hoga saare accounts ke beech me (RAM bachane ke liye)
         browser = await p.chromium.launch(
             channel="chrome", 
             headless=True, 
             args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-dev-shm-usage"]
         )
         
-        # Har id par loop chalega
+        tasks = []
+        
+        # Saare accounts ko 2-2 second ke gap par background me start karna
         for index, cookie_b64 in enumerate(cookies_list):
-            print(f"🚀 Running account {index+1}/{len(cookies_list)}...")
-            try:
-                await process_account(browser, cookie_b64, p)
-            except Exception as e:
-                print(f"⚠️ Error in account {index+1}: {e}")
+            account_idx = index + 1
+            print(f"💤 Triggering Account {account_idx} in background...")
             
-            # Har account ke baad 2 second ka gap dega (aakhri account ke baad zaroorat nahi)
+            # create_task se bina ruke background me chal jata hai
+            task = asyncio.create_task(process_account(browser, cookie_b64, p, account_idx))
+            tasks.append(task)
+            
+            # Agar aakhri account nahi hai, toh agle ko start karne se pehle 2 second ruko
             if index < len(cookies_list) - 1:
-                print("⏳ Waiting for 2 seconds before running next account...")
+                print("⏳ Waiting 2 seconds before launching next machine...")
                 await asyncio.sleep(2)
                 
+        print("📥 All machines have been fired up! Waiting for all to complete tasks...")
+        # Yeh line sabhi chalne wale background tasks ke poora hone ka wait karegi
+        await asyncio.gather(*tasks, return_exceptions=True)
+        
         await browser.close()
-        print("✅ All accounts processed successfully!")
+        print("🎉 All parallel tasks completed!")
 
 if __name__ == "__main__":
     asyncio.run(main())
