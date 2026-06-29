@@ -19,6 +19,15 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # 🗂️ CACHE SETUP TO SAVE DEVICE MAPPING FOREVER
+      - name: Cache Device Map
+        uses: actions/cache@v3
+        with:
+          path: amrat_device_map.json
+          key: insta-device-map-${{ github.run_id }}
+          restore-keys: |
+            insta-device-map-
+
       # 👇 DIRECT WARP VPN INSTALLATION (Bina kisi 3rd-party repo ke) 👇
       - name: Setup Cloudflare WARP VPN Manually
         run: |
