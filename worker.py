@@ -10,7 +10,6 @@ import requests
 TARGET_URL = os.environ.get("TARGET_URL")
 CHAT_ID = os.environ.get("CHAT_ID")
 TG_TOKEN = os.environ.get("TG_TOKEN") 
-# 👇 Ab sirf ek cookie variable
 COOKIE_B64 = os.environ.get("COOKIE") 
 
 COMMENTS_LIST = ["🔥 Ek number bhai!", "Bhai kya baat hai! 😍", "Superb video bro 🚀", "Gajab editing 👏"]
@@ -33,7 +32,7 @@ async def send_screenshot(image_path, text):
     await asyncio.to_thread(_upload)
 
 # 🗂️ JSON Mapping Logic for Permanent Device
-def get_or_assign_device(cookie_id):
+def get_or_assign_device(cookie_id, p):
     if os.path.exists(DEVICE_MAP_FILE):
         try:
             with open(DEVICE_MAP_FILE, 'r') as f:
@@ -45,37 +44,37 @@ def get_or_assign_device(cookie_id):
 
     if cookie_id in device_map:
         assigned_device = device_map[cookie_id]
-        print(f"🔄 Purana fix device mil gaya -> {assigned_device}")
+        # Check agar device valid hai
+        if assigned_device not in p.devices:
+            assigned_device = "iPhone 13" 
+        print(f"🔄 Purana fix device: {assigned_device}")
     else:
-        # Best mobile profiles in Playwright
-        safe_mobiles = ["iPhone 13", "Pixel 5", "Galaxy S22", "iPhone 12 Pro", "Pixel 7"]
+        # Valid Playwright Devices
+        safe_mobiles = ["iPhone 13", "Pixel 5", "iPhone 12", "Pixel 4", "iPhone 11"]
         assigned_device = random.choice(safe_mobiles)
         device_map[cookie_id] = assigned_device
-        print(f"✨ Pehli baar login, naya device assign hua -> {assigned_device}")
-
         with open(DEVICE_MAP_FILE, 'w') as f:
             json.dump(device_map, f, indent=4)
+        print(f"✨ Naya device assign hua: {assigned_device}")
 
     return assigned_device
 
 async def process_account(browser, cookie_b64, p):
     if not cookie_b64: 
-        print(f"⚠️ Account ki cookie nahi mili!")
+        print(f"⚠️ Cookie nahi mili!")
         return
     
     print(f"\n=========================================")
     print(f"🟢 Starting Single Account Session...")
     print(f"=========================================")
     
-    # Cookie base64 ke shuru ke 30 characters ko Unique ID bana liya
     cookie_unique_id = cookie_b64[:30] 
-    device_name = get_or_assign_device(cookie_unique_id)
+    device_name = get_or_assign_device(cookie_unique_id, p)
     device_profile = p.devices[device_name]
     
     cookie_str = base64.b64decode(cookie_b64).decode()
     cookies = json.loads(cookie_str)
     
-    # Mobile Profile Context Inject
     context = await browser.new_context(
         **device_profile,
         user_agent=device_profile['user_agent']
@@ -93,10 +92,7 @@ async def process_account(browser, cookie_b64, p):
     try:
         print(f"🏠 Warming up on Home Page...")
         await page.goto("https://www.instagram.com/", wait_until="domcontentloaded")
-        
-        print(f"⏳ Waiting exactly 7 seconds for popups to appear...")
         await asyncio.sleep(7)
-        print(f"⌨️ Pressing 'Escape' to close any notifications/popups...")
         await page.keyboard.press("Escape")
         await asyncio.sleep(1) 
 
@@ -104,196 +100,101 @@ async def process_account(browser, cookie_b64, p):
         await page.goto(TARGET_URL, wait_until="domcontentloaded")
         start_time = time.time()
         
-        action_start_delay = random.randint(15, 45)
-        print(f"⏳ Bot ab {action_start_delay} seconds wait karega actions shuru karne se pehle...")
-        await asyncio.sleep(action_start_delay)
-        
+        await asyncio.sleep(random.randint(15, 45))
         current_comment = random.choice(COMMENTS_LIST)
         
         # 🟢 Action Functions
         async def do_like():
             try:
-                print(f"❤️ Trying to Like...")
                 await page.evaluate("(() => { let s = document.querySelectorAll('svg[aria-label=\"Like\"]'); if(s.length>0) { let b = s[0].closest('div[role=\"button\"]'); if(b) b.click(); } })();")
                 await asyncio.sleep(1)
-            except Exception as e: print(f"Like Error:", e)
+            except Exception as e: print("Like Error:", e)
 
         async def do_save():
             try:
-                print(f"🔖 Trying to Save...")
                 await page.evaluate("(() => { let s = document.querySelectorAll('svg[aria-label=\"Save\"], svg[aria-label=\"Bookmark\"]'); if(s.length>0) { let b = s[0].closest('div[role=\"button\"]'); if(b) b.click(); } })();")
                 await asyncio.sleep(1)
-            except Exception as e: print(f"Save Error:", e)
+            except Exception as e: print("Save Error:", e)
 
         async def do_repost():
             try:
-                print(f"🔁 Trying to Repost (Share)...")
                 clicked = await page.evaluate("""(() => {
                     let s = document.querySelectorAll('svg[aria-label="Share Post"], svg[aria-label="Share"], svg[aria-label="Repost"]');
-                    if(s.length>0) { 
-                        let b = s[0].closest('div[role="button"], button, a'); 
-                        if(b) { b.click(); return true; }
-                    }
+                    if(s.length>0) { let b = s[0].closest('div[role="button"], button, a'); if(b) { b.click(); return true; } }
                     return false;
                 })();""")
-                
                 if clicked:
                     await asyncio.sleep(2) 
                     await page.evaluate("""(() => {
                         let elements = document.querySelectorAll('div[role="button"], span, div');
-                        for(let el of elements) {
-                            if(el.textContent && el.textContent.trim() === 'Repost') {
-                                let btn = el.closest('div[role="button"]') || el;
-                                btn.click();
-                                break;
-                            }
-                        }
+                        for(let el of elements) { if(el.textContent && el.textContent.trim() === 'Repost') { el.closest('div[role="button"]')?.click(); break; } }
                     })();""")
-                    print(f"✅ Repost done via JS!")
-
                     await asyncio.sleep(2)
                     await page.evaluate("""(() => {
                         let closeBtns = document.querySelectorAll('svg[aria-label="Close"]');
-                        if(closeBtns.length > 0) {
-                            let btn = closeBtns[closeBtns.length - 1].closest('div[role="button"], button');
-                            if(btn) { btn.click(); }
-                        }
+                        if(closeBtns.length > 0) { closeBtns[closeBtns.length - 1].closest('div[role="button"], button')?.click(); }
                     })();""")
-                    print(f"✅ Repost Popup successfully closed!")
-                    
-                await asyncio.sleep(1)
-            except Exception as e: 
-                print(f"❌ Repost Error: {e}")
+            except Exception as e: print("Repost Error:", e)
 
         async def do_comment():
             try:
-                print(f"💬 Trying to Comment...")
                 icon_clicked = await page.evaluate("""(() => {
                     let s = document.querySelectorAll('svg[aria-label="Comment"]');
-                    if(s.length>0) { 
-                        let b = s[0].closest('div[role="button"], button, a'); 
-                        if(b) { b.click(); return true; }
-                    }
+                    if(s.length>0) { let b = s[0].closest('div[role="button"], button, a'); if(b) { b.click(); return true; } }
                     return false;
                 })();""")
-                
-                if not icon_clicked:
-                    print(f"⚠️ Comment icon nahi mila.")
-                    return
+                if not icon_clicked: return
 
                 await asyncio.sleep(3) 
-                
                 box_focused = await page.evaluate("""(() => {
                     let box = document.querySelector('textarea[aria-label*="comment" i], div[role="textbox"], input[placeholder*="comment" i], textarea[placeholder*="comment" i]');
-                    if(box) { 
-                        box.focus(); 
-                        box.click(); 
-                        return true; 
-                    }
+                    if(box) { box.focus(); box.click(); return true; }
                     return false;
                 })();""")
                 
                 if box_focused:
                     await asyncio.sleep(1)
-                    # ⌨️ HUMAN-LIKE TYPING LOGIC
                     for char in current_comment:
                         await page.keyboard.type(char)
                         await asyncio.sleep(random.uniform(0.05, 0.25))
                     await asyncio.sleep(1)
                     
-                    posted_via_js = await page.evaluate("""(() => {
+                    posted = await page.evaluate("""(() => {
                         let elements = document.querySelectorAll('div[role="button"]');
-                        for(let el of elements) {
-                            if(el.textContent && el.textContent.trim() === 'Post') {
-                                el.click();
-                                return true;
-                            }
-                        }
+                        for(let el of elements) { if(el.textContent && el.textContent.trim() === 'Post') { el.click(); return true; } }
                         return false;
                     })();""")
-                    
-                    if posted_via_js:
-                        print(f"✅ 'Post' button clicked successfully via EXACT element logic!")
-                    else:
-                        print(f"⚠️ JS fail hua, Playwright Native Click try kar raha hu...")
-                        try:
-                            post_locator = page.locator('div[role="button"]:text-is("Post")')
-                            if await post_locator.count() > 0:
-                                await post_locator.last.click(timeout=3000)
-                                print(f"✅ Posted via Playwright Native Click!")
-                        except Exception as inner_e:
-                            print(f"❌ Dono method se Post button click nahi hua.")
-                        
-                else:
-                    print(f"⚠️ Comment box detect nahi hua.")
-                    
-                await asyncio.sleep(4)
-            except Exception as e: 
-                print(f"❌ Comment fail hua: {e}")
+            except Exception as e: print("Comment Error:", e)
 
-        # --- RANDOMIZE WORKFLOW ORDER ---
-        actions = [
-            ("Like", do_like),
-            ("Save", do_save),
-            ("Repost", do_repost),
-            ("Comment", do_comment)
-        ]
+        actions = [("Like", do_like), ("Save", do_save), ("Repost", do_repost), ("Comment", do_comment)]
         random.shuffle(actions) 
-        
-        print(f"🎲 Random Action Order:", [a[0] for a in actions])
         for name, action in actions:
             await action()
             await asyncio.sleep(random.uniform(1, 3)) 
 
-        print(f"✅ Saare Actions Done!")
-
+        # 📸 Screenshot Logic
         elapsed = time.time() - start_time
         wait_for_75 = 75 - elapsed
-        if wait_for_75 > 0:
-            print(f"⏳ 75s mark tak pahunchne ke liye {int(wait_for_75)}s aur ruk raha hu...")
-            await asyncio.sleep(wait_for_75)
+        if wait_for_75 > 0: await asyncio.sleep(wait_for_75)
             
-        screenshot_path = f"proof_single.png"
+        screenshot_path = "proof_single.png"
         await page.screenshot(path=screenshot_path)
-        print(f"📸 75th Second par Screenshot liya! Telegram par bhej raha hu...")
-        await send_screenshot(screenshot_path, f"✅ Target URL Par Kaam Pura Hua!\n📝 Comment: {current_comment}\n📱 Device: {device_name}")
+        await send_screenshot(screenshot_path, f"✅ Done!\nDevice: {device_name}")
 
-        exit_time_target = random.randint(80, 90)
-        elapsed_now = time.time() - start_time
-        wait_for_exit = exit_time_target - elapsed_now
-        
-        if wait_for_exit > 0: 
-            print(f"⏳ Final Random Exit ke liye {int(wait_for_exit)} seconds bache hain...")
-            await asyncio.sleep(wait_for_exit)
+        wait_for_exit = random.randint(80, 90) - (time.time() - start_time)
+        if wait_for_exit > 0: await asyncio.sleep(wait_for_exit)
             
-    except Exception as e: print(f"Error in Session:", e)
     finally:
-        total_time_spent = int(time.time() - start_time) if 'start_time' in locals() else 0
-        print(f"🏁 Session closed after ~{total_time_spent} seconds.")
         await context.close()
 
 async def main():
     async with async_playwright() as p:
-        # 🕵️‍♂️ STEALTH MODE
         browser = await p.chromium.launch(
             channel="chrome", 
             headless=True, 
-            args=[
-                "--start-maximized",
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-dev-shm-usage"
-            ]
+            args=["--start-maximized", "--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-dev-shm-usage"]
         )
-        
-        print("\n🚀 Ek machine par sirf ek account start kar rahe hain...\n")
-        
-        if COOKIE_B64:
-            await process_account(browser, COOKIE_B64, p)
-        else:
-            print("⚠️ Koi cookie provide nahi ki gayi hai!")
-            
-        print("\n🏆 ACCOUNT KA KAAM SUCCESSFULLY COMPLETE HO GAYA!")
+        if COOKIE_B64: await process_account(browser, COOKIE_B64, p)
         await browser.close()
 
 if __name__ == "__main__":
