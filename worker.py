@@ -6,12 +6,12 @@ import json
 import time
 import random
 import requests
-import hashlib # Naya import add kiya hai unique ID ke liye
+import hashlib
 
 TARGET_URL = os.environ.get("TARGET_URL")
 CHAT_ID = os.environ.get("CHAT_ID")
 TG_TOKEN = os.environ.get("TG_TOKEN") 
-COOKIE_B64 = os.environ.get("COOKIE") 
+COOKIES_INPUT = os.environ.get("COOKIE") 
 
 COMMENTS_LIST = ["🔥 Ek number bhai!", "Bhai kya baat hai! 😍", "Superb video bro 🚀", "Gajab editing 👏"]
 DEVICE_MAP_FILE = "amrat_device_map.json"
@@ -53,15 +53,13 @@ def get_or_assign_device(cookie_id, p):
     with open(DEVICE_MAP_FILE, 'w') as f:
         json.dump(device_map, f, indent=4)
         
-    print(f"✨ New valid mobile device: {assigned_device}")
+    print(f"✨ Assigned mobile device: {assigned_device}")
     return assigned_device
 
 async def process_account(browser, cookie_b64, p):
     if not cookie_b64: return
     
-    # FIX 1: Base64 ke starting chars ki jagah MD5 hash banaya hai taaki har cookie ka unique id bane
     cookie_unique_id = hashlib.md5(cookie_b64.encode('utf-8')).hexdigest()
-    
     device_name = get_or_assign_device(cookie_unique_id, p)
     device_profile = p.devices[device_name]
     
@@ -87,7 +85,6 @@ async def process_account(browser, cookie_b64, p):
         start_time = time.time()
         
         await asyncio.sleep(random.randint(15, 45))
-        current_comment = random.choice(COMMENTS_LIST)
         
         async def do_action(label):
             await page.evaluate(f"(() => {{ let s = document.querySelectorAll('svg[aria-label=\"{label}\"]'); if(s.length>0) s[0].closest('div[role=\"button\"]')?.click(); }})();")
@@ -103,21 +100,45 @@ async def process_account(browser, cookie_b64, p):
         if elapsed < 75: await asyncio.sleep(75 - elapsed)
         
         await page.screenshot(path="proof.png")
-        await send_screenshot("proof.png", f"✅ Done!\nDevice: {device_name}")
+        # Telegram msg me ID add ki hai taaki pata chale kaunsi ID hui hai
+        await send_screenshot("proof.png", f"✅ Done! (ID: {cookie_unique_id[:6]})\n📱 Device: {device_name}")
         
     finally:
         await context.close()
 
 async def main():
+    if not COOKIES_INPUT:
+        print("❌ No cookies provided!")
+        return
+        
+    # User ne jitni bhi cookies di hongi (comma ya new line se alag), sabko list banayega
+    raw_cookies = COOKIES_INPUT.replace('\\n', ',').replace('\n', ',').split(',')
+    cookies_list = [c.strip() for c in raw_cookies if c.strip()]
+    
+    print(f"🔥 Total {len(cookies_list)} accounts found. Running them one by one...")
+
     async with async_playwright() as p:
-        # FIX 2: "--start-maximized" ko hara diya gaya hai taaki mobile view landscape na bane
         browser = await p.chromium.launch(
             channel="chrome", 
             headless=True, 
             args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-dev-shm-usage"]
         )
-        if COOKIE_B64: await process_account(browser, COOKIE_B64, p)
+        
+        # Har id par loop chalega
+        for index, cookie_b64 in enumerate(cookies_list):
+            print(f"🚀 Running account {index+1}/{len(cookies_list)}...")
+            try:
+                await process_account(browser, cookie_b64, p)
+            except Exception as e:
+                print(f"⚠️ Error in account {index+1}: {e}")
+            
+            # Har account ke baad 2 second ka gap dega (aakhri account ke baad zaroorat nahi)
+            if index < len(cookies_list) - 1:
+                print("⏳ Waiting for 2 seconds before running next account...")
+                await asyncio.sleep(2)
+                
         await browser.close()
+        print("✅ All accounts processed successfully!")
 
 if __name__ == "__main__":
     asyncio.run(main())
