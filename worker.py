@@ -31,7 +31,7 @@ async def send_screenshot(image_path, text):
                 time.sleep(2)
     await asyncio.to_thread(_upload)
 
-# 🗂️ Dynamic Device Selector (100+ Devices)
+# 🗂️ Dynamic Device Selector (Strict Mobile Only)
 def get_or_assign_device(cookie_id, p):
     if os.path.exists(DEVICE_MAP_FILE):
         try:
@@ -48,18 +48,24 @@ def get_or_assign_device(cookie_id, p):
             print(f"🔄 Purana fix device: {assigned_device}")
             return assigned_device
 
-    # 💡 Playwright ki database se mobile devices filter karo
+    # 💡 Strict Mobile Filtering Logic
     all_devices = list(p.devices.keys())
-    mobile_keywords = ['iPhone', 'Pixel', 'Samsung', 'Galaxy', 'Nexus', 'Moto']
-    safe_mobiles = [d for d in all_devices if any(k in d for k in mobile_keywords)]
+    forbidden = ['landscape', 'tablet', 'iPad', 'Nexus 10', 'Fold', 'Mini', 'TV', 'Desktop']
+    allowed = ['iPhone', 'Pixel', 'Samsung', 'Galaxy', 'Moto']
     
+    safe_mobiles = [d for d in all_devices 
+                    if any(k in d for k in allowed) 
+                    and not any(f in d for f in forbidden)]
+    
+    # ⚡ Staggering to prevent duplicate assignment
+    time.sleep(random.uniform(0.5, 2.0)) 
     assigned_device = random.choice(safe_mobiles) if safe_mobiles else "iPhone 13"
     
     device_map[cookie_id] = assigned_device
     with open(DEVICE_MAP_FILE, 'w') as f:
         json.dump(device_map, f, indent=4)
         
-    print(f"✨ Naya device assign hua: {assigned_device}")
+    print(f"✨ Naya mobile device assign hua: {assigned_device}")
     return assigned_device
 
 async def process_account(browser, cookie_b64, p):
@@ -78,7 +84,7 @@ async def process_account(browser, cookie_b64, p):
     cookie_str = base64.b64decode(cookie_b64).decode()
     cookies = json.loads(cookie_str)
     
-    # 🚨 FIX: Sirf **device_profile pass karo, user_agent alag se nahi
+    # 🚨 FIX: Sirf **device_profile pass karo (User-Agent inside)
     context = await browser.new_context(**device_profile)
     
     cleaned_cookies = []
