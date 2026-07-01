@@ -8,7 +8,7 @@ import random
 import requests
 import google.generativeai as genai
 
-# --- ENVIRONMENT VARIABLES ---
+# --- ENVIRONMENT VARIABLES (Coming from YAML Inputs & Secrets) ---
 TARGET_URL = os.environ.get("TARGET_URL")
 CHAT_ID = os.environ.get("CHAT_ID")
 TG_TOKEN = os.environ.get("TG_TOKEN") 
@@ -36,7 +36,7 @@ async def send_screenshot(image_path, text):
                 time.sleep(2)
     await asyncio.to_thread(_upload)
 
-# 🧠 Gemini AI Comment Generator
+# 🧠 Gemini AI Comment Generator (Updated to Gemini 3.5 Flash as per Screenshot)
 async def get_gemini_comment(video_context):
     if not GEMINI_API_KEY:
         return random.choice(["Bhai kya baat hai! 🔥", "Superb video bro 🚀", "Gajab editing 👏", "Ek number bhai! 😍"])
@@ -44,7 +44,8 @@ async def get_gemini_comment(video_context):
     print(f"🧠 AI soch raha hai... Context: {video_context[:40]}...")
     def _generate():
         try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            # Screenshot ke hisaab se Gemini 3.5 Flash use kar rahe hain
+            model = genai.GenerativeModel('gemini-3.5-flash')
             prompt = f"""
             You are a normal Indian Instagram user. Write a short, natural, and highly engaging Instagram comment for a video about: '{video_context}'.
             Rules:
@@ -63,16 +64,20 @@ async def get_gemini_comment(video_context):
 
 # 🚀 Main Account Processing Logic
 async def process_account(browser, cookie_b64, account_num):
-    if not cookie_b64: 
-        print(f"⚠️ Account {account_num} ki cookie nahi mili!")
+    if not cookie_b64 or cookie_b64.strip() == "": 
+        print(f"⚠️ Account {account_num} ki cookie nahi mili ya skip kar di gayi!")
         return
     
     print(f"\n=========================================")
     print(f"🟢 Starting Account {account_num}...")
     print(f"=========================================")
     
-    cookie_str = base64.b64decode(cookie_b64).decode()
-    cookies = json.loads(cookie_str)
+    try:
+        cookie_str = base64.b64decode(cookie_b64).decode()
+        cookies = json.loads(cookie_str)
+    except Exception as e:
+        print(f"❌ Account {account_num} ki Cookie decode nahi hui: {e}")
+        return
     
     context = await browser.new_context(
         viewport={'width': 1920, 'height': 1080},
@@ -106,7 +111,7 @@ async def process_account(browser, cookie_b64, account_num):
         # --- Context nikal kar AI comment generate karo ---
         page_title = await page.title()
         current_comment = await get_gemini_comment(page_title)
-        print(f"✅ Account {account_num} Final Comment: '{current_comment}'")
+        print(f"✅ Account {account_num} Final AI Comment: '{current_comment}'")
         
         # 🟢 Actions
         async def do_like():
@@ -185,6 +190,7 @@ async def process_account(browser, cookie_b64, account_num):
 
 async def main():
     async with async_playwright() as p:
+        # 🚨 Asli Chrome launch kar rahe hain (channel="chrome")
         browser = await p.chromium.launch(channel="chrome", headless=True, args=["--start-maximized"])
         print("\n🚀 Accounts ko ab EK SATH (Parallel) start kar rahe hain...\n")
         
