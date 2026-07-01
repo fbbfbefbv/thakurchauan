@@ -1,19 +1,14 @@
 name: Insta Bot Worker
-
 on:
   workflow_dispatch:
     inputs:
       target_url:
-        description: "Target Instagram Post URL"
         required: true
       chat_id:
-        description: "Telegram Chat ID"
         required: true
       cookie_1:
-        description: "Base64 Cookie for Account 1"
         required: true
       cookie_2:
-        description: "Base64 Cookie for Account 2"
         required: false
 
 jobs:
@@ -31,8 +26,8 @@ jobs:
           
       - name: Install dependencies
         run: |
-          pip install playwright requests python-dotenv google-generativeai
-          # 🚨 Yahan sirf asli Chrome install hoga Chromium ki jagah
+          pip install playwright requests python-dotenv
+          # 🚨 Yahan ab sirf asli Chrome install hoga Chromium ki jagah
           playwright install chrome
           
       - name: Run Bot Worker
@@ -42,5 +37,5 @@ jobs:
           COOKIE_1: ${{ github.event.inputs.cookie_1 }}
           COOKIE_2: ${{ github.event.inputs.cookie_2 }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        # 🚨 Script run command ko tumhare actual file name ke hisaab se update kiya
         run: python worker.py
