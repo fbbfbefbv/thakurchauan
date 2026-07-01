@@ -6,6 +6,10 @@ import json
 import time
 import random
 import requests
+from faker import Faker
+
+# Faker ko Indian names ke liye set kiya
+fake = Faker('en_IN')
 
 TARGET_URL = os.environ.get("TARGET_URL")
 CHAT_ID = os.environ.get("CHAT_ID")
@@ -119,7 +123,6 @@ async def process_account(browser, cookie_b64, account_num):
                     })();""")
                     print(f"✅ Account {account_num}: Repost done via JS!")
 
-                    # Popup Close Karne Ke Liye
                     await asyncio.sleep(2)
                     await page.evaluate("""(() => {
                         let closeBtns = document.querySelectorAll('svg[aria-label="Close"]');
@@ -167,7 +170,6 @@ async def process_account(browser, cookie_b64, account_num):
                     await page.keyboard.type(current_comment, delay=150)
                     await asyncio.sleep(1)
                     
-                    # 🚀 NAYA 100% CONFIRM INSPECT ELEMENT LOGIC 
                     posted_via_js = await page.evaluate("""(() => {
                         let elements = document.querySelectorAll('div[role="button"]');
                         for(let el of elements) {
@@ -180,18 +182,16 @@ async def process_account(browser, cookie_b64, account_num):
                     })();""")
                     
                     if posted_via_js:
-                        print(f"✅ Account {account_num}: 'Post' button clicked successfully via EXACT element logic!")
+                        print(f"✅ Account {account_num}: 'Post' button clicked successfully via JS!")
                     else:
-                        print(f"⚠️ Account {account_num}: JS fail hua, Playwright Native Click try kar raha hu...")
+                        print(f"⚠️ Account {account_num}: JS fail hua, Native Click try kar raha hu...")
                         try:
-                            # Exact match locator based on your inspect element
                             post_locator = page.locator('div[role="button"]:text-is("Post")')
                             if await post_locator.count() > 0:
                                 await post_locator.last.click(timeout=3000)
                                 print(f"✅ Account {account_num}: Posted via Playwright Native Click!")
                         except Exception as inner_e:
                             print(f"❌ Account {account_num} dono method se Post button click nahi hua.")
-                        
                 else:
                     print(f"⚠️ Account {account_num}: Comment box detect nahi hua.")
                     
@@ -199,12 +199,112 @@ async def process_account(browser, cookie_b64, account_num):
             except Exception as e: 
                 print(f"❌ Account {account_num} Comment fail hua: {e}")
 
+        # 🌟 NEW 10x SEARCH & DM SHARE LOGIC 🌟
+        async def do_dm_share():
+            try:
+                print(f"📤 Account {account_num}: Trying to DM Share to 10 random people...")
+                
+                # 1. Click Share Icon
+                share_clicked = await page.evaluate("""(() => {
+                    let s = document.querySelectorAll('svg[aria-label="Share Post"], svg[aria-label="Share"]');
+                    if(s.length > 0) {
+                        let b = s[0].closest('div[role="button"], button, a');
+                        if(b) { b.click(); return true; }
+                    }
+                    return false;
+                })();""")
+
+                if not share_clicked:
+                    print(f"⚠️ Account {account_num}: DM Share icon nahi mila.")
+                    return
+
+                await asyncio.sleep(3) 
+
+                # 2. Loop: Search 10 times and select 1 user per search
+                selected_count = 0
+                for i in range(10):
+                    random_name = fake.first_name().lower() # Jaise 'mohit', 'rahul'
+                    print(f"🔍 [{i+1}/10] Search kar rahe hain: '{random_name}'...")
+                    
+                    try:
+                        search_input = page.locator('input[placeholder*="Search" i], input[type="text"]').first
+                        if await search_input.count() > 0:
+                            # Pehle purana search clear karo
+                            await search_input.fill("") 
+                            await asyncio.sleep(1)
+                            
+                            # Naya naam type karo (Human-like delay ke sath)
+                            await search_input.type(random_name, delay=120) 
+                            await asyncio.sleep(3) # Server se users load hone ka wait
+                            
+                            # Unselected (khali circle) dhundho aur click karo
+                            clicked_user = await page.evaluate("""(() => {
+                                // Aise circles jo selected nahi hain (blue tick nahi hain)
+                                let circles = document.querySelectorAll('svg[aria-label="Toggle selection"], input[type="checkbox"], div[role="checkbox"]');
+                                for(let c of circles) {
+                                    let isChecked = c.getAttribute('aria-checked') === 'true' || c.checked || c.getAttribute('aria-label') === 'Selected';
+                                    if(!isChecked) {
+                                        let btn = c.closest('div[role="button"], div[role="checkbox"]') || c;
+                                        btn.click();
+                                        return true; // Click hote hi bahar aa jao
+                                    }
+                                }
+                                return false;
+                            })();""")
+
+                            if clicked_user:
+                                selected_count += 1
+                                print(f"  👉 User selected! Total count: {selected_count}")
+                            else:
+                                print(f"  ⚠️ '{random_name}' ke liye naya user nahi mila.")
+                                
+                    except Exception as e:
+                        print(f"⚠️ Search loop me error: {e}")
+
+                    await asyncio.sleep(1.5) # Har search ke baad thoda break
+
+                # 3. Last me ek baar Final "Send" button dabana (Image 3 logic)
+                if selected_count > 0:
+                    print(f"🚀 Total {selected_count} users select ho gaye. Ab Final 'Send' dabayenge...")
+                    await asyncio.sleep(2)
+                    
+                    sent = await page.evaluate("""(() => {
+                        let buttons = Array.from(document.querySelectorAll('div[role="button"], button'));
+                        // Reverse loop chalaya taaki bottom wala Send button mile
+                        let sendBtn = buttons.reverse().find(btn => btn.textContent && btn.textContent.trim() === 'Send');
+                        
+                        if (sendBtn) {
+                            sendBtn.click();
+                            return true;
+                        }
+                        return false;
+                    })();""")
+
+                    if sent:
+                        print(f"✅ Account {account_num}: Video successfully {selected_count} logo ko DM ho gaya!")
+                    else:
+                        print(f"⚠️ Account {account_num}: JS fail hua, Native Click try kar raha hu...")
+                        try:
+                            # Playwright native click
+                            await page.locator('div[role="button"]:has-text("Send"), button:has-text("Send")').last.click(timeout=3000)
+                            print(f"✅ Account {account_num}: Playwright Native Click se Send ho gaya!")
+                        except:
+                            print(f"❌ Account {account_num}: Send button dono method se fail hua.")
+                else:
+                    print(f"⚠️ Ek bhi user select nahi ho paaya, isliye Send button nahi dabaya.")
+
+                await asyncio.sleep(3)
+
+            except Exception as e:
+                print(f"❌ Account {account_num} DM Share Error: {e}")
+
         # --- RANDOMIZE WORKFLOW ORDER ---
         actions = [
             ("Like", do_like),
             ("Save", do_save),
             ("Repost", do_repost),
-            ("Comment", do_comment)
+            ("Comment", do_comment),
+            ("DM Share", do_dm_share) # 👈 DM Share bhi isme add ho gaya
         ]
         random.shuffle(actions) 
         
