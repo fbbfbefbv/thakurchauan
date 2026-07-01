@@ -26,7 +26,8 @@ jobs:
           
       - name: Install dependencies
         run: |
-          pip install playwright requests python-dotenv
+          # 🚨 YAHAN FAKER ADD KIYA HAI 👇
+          pip install playwright requests python-dotenv faker
           # 🚨 Yahan ab sirf asli Chrome install hoga Chromium ki jagah
           playwright install chrome
           
