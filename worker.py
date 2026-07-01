@@ -6,16 +6,21 @@ import json
 import time
 import random
 import requests
+import google.generativeai as genai
 
+# --- ENVIRONMENT VARIABLES ---
 TARGET_URL = os.environ.get("TARGET_URL")
 CHAT_ID = os.environ.get("CHAT_ID")
 TG_TOKEN = os.environ.get("TG_TOKEN") 
 C1_B64 = os.environ.get("COOKIE_1")
 C2_B64 = os.environ.get("COOKIE_2")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-COMMENTS_LIST = ["🔥 Ek number bhai!", "Bhai kya baat hai! 😍", "Superb video bro 🚀", "Gajab editing 👏"]
+# --- GEMINI AI SETUP ---
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
-# 🛡️ Safe Telegram Sender with Retry Logic
+# 🛡️ Safe Telegram Sender
 async def send_screenshot(image_path, text):
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto"
     def _upload():
@@ -31,6 +36,32 @@ async def send_screenshot(image_path, text):
                 time.sleep(2)
     await asyncio.to_thread(_upload)
 
+# 🧠 Gemini AI Comment Generator
+async def get_gemini_comment(video_context):
+    if not GEMINI_API_KEY:
+        return random.choice(["Bhai kya baat hai! 🔥", "Superb video bro 🚀", "Gajab editing 👏", "Ek number bhai! 😍"])
+        
+    print(f"🧠 AI soch raha hai... Context: {video_context[:40]}...")
+    def _generate():
+        try:
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            prompt = f"""
+            You are a normal Indian Instagram user. Write a short, natural, and highly engaging Instagram comment for a video about: '{video_context}'.
+            Rules:
+            - Language: Hinglish (Hindi written in English alphabet).
+            - Keep it very short (1 sentence maximum).
+            - Use 1 or 2 relevant emojis.
+            - DO NOT use hashtags, quotes, or robotic words.
+            """
+            response = model.generate_content(prompt)
+            return response.text.strip().replace('"', '')
+        except Exception as e:
+            print(f"⚠️ Gemini API Error: {e}")
+            return random.choice(["Bhai maza aa gaya! 🚀", "Aag laga di! 🔥", "Ek number kaam 💯"])
+            
+    return await asyncio.to_thread(_generate)
+
+# 🚀 Main Account Processing Logic
 async def process_account(browser, cookie_b64, account_num):
     if not cookie_b64: 
         print(f"⚠️ Account {account_num} ki cookie nahi mili!")
@@ -60,10 +91,7 @@ async def process_account(browser, cookie_b64, account_num):
     try:
         print(f"🏠 Account {account_num}: Warming up on Home Page...")
         await page.goto("https://www.instagram.com/", wait_until="domcontentloaded")
-        
-        print(f"⏳ Account {account_num}: Waiting exactly 7 seconds for popups to appear...")
         await asyncio.sleep(7)
-        print(f"⌨️ Account {account_num}: Pressing 'Escape' to close any notifications/popups...")
         await page.keyboard.press("Escape")
         await asyncio.sleep(1) 
 
@@ -71,197 +99,103 @@ async def process_account(browser, cookie_b64, account_num):
         await page.goto(TARGET_URL, wait_until="domcontentloaded")
         start_time = time.time()
         
-        # --- RANDOM ACTION START TIME (15s to 45s) ---
         action_start_delay = random.randint(15, 45)
-        print(f"⏳ Account {account_num}: Bot ab {action_start_delay} seconds wait karega actions shuru karne se pehle...")
+        print(f"⏳ Account {account_num}: Actions shuru hone me {action_start_delay}s lagenge...")
         await asyncio.sleep(action_start_delay)
         
-        current_comment = random.choice(COMMENTS_LIST)
+        # --- Context nikal kar AI comment generate karo ---
+        page_title = await page.title()
+        current_comment = await get_gemini_comment(page_title)
+        print(f"✅ Account {account_num} Final Comment: '{current_comment}'")
         
-        # 🟢 Action Functions
+        # 🟢 Actions
         async def do_like():
             try:
                 print(f"❤️ Account {account_num}: Trying to Like...")
                 await page.evaluate("(() => { let s = document.querySelectorAll('svg[aria-label=\"Like\"]'); if(s.length>0) { let b = s[0].closest('div[role=\"button\"]'); if(b) b.click(); } })();")
-                await asyncio.sleep(1)
-            except Exception as e: print(f"Like Error Acc {account_num}:", e)
+            except Exception: pass
 
         async def do_save():
             try:
                 print(f"🔖 Account {account_num}: Trying to Save...")
                 await page.evaluate("(() => { let s = document.querySelectorAll('svg[aria-label=\"Save\"], svg[aria-label=\"Bookmark\"]'); if(s.length>0) { let b = s[0].closest('div[role=\"button\"]'); if(b) b.click(); } })();")
-                await asyncio.sleep(1)
-            except Exception as e: print(f"Save Error Acc {account_num}:", e)
+            except Exception: pass
 
         async def do_repost():
             try:
                 print(f"🔁 Account {account_num}: Trying to Repost (Share)...")
                 clicked = await page.evaluate("""(() => {
                     let s = document.querySelectorAll('svg[aria-label="Share Post"], svg[aria-label="Share"], svg[aria-label="Repost"]');
-                    if(s.length>0) { 
-                        let b = s[0].closest('div[role="button"], button, a'); 
-                        if(b) { b.click(); return true; }
-                    }
-                    return false;
+                    if(s.length>0) { let b = s[0].closest('div[role="button"], button, a'); if(b) { b.click(); return true; } } return false;
                 })();""")
-                
                 if clicked:
                     await asyncio.sleep(2) 
-                    await page.evaluate("""(() => {
-                        let elements = document.querySelectorAll('div[role="button"], span, div');
-                        for(let el of elements) {
-                            if(el.textContent && el.textContent.trim() === 'Repost') {
-                                let btn = el.closest('div[role="button"]') || el;
-                                btn.click();
-                                break;
-                            }
-                        }
-                    })();""")
-                    print(f"✅ Account {account_num}: Repost done via JS!")
-
-                    # Popup Close Karne Ke Liye
+                    await page.evaluate("""(() => { let elements = document.querySelectorAll('div[role="button"], span, div'); for(let el of elements) { if(el.textContent && el.textContent.trim() === 'Repost') { let btn = el.closest('div[role="button"]') || el; btn.click(); break; } } })();""")
                     await asyncio.sleep(2)
-                    await page.evaluate("""(() => {
-                        let closeBtns = document.querySelectorAll('svg[aria-label="Close"]');
-                        if(closeBtns.length > 0) {
-                            let btn = closeBtns[closeBtns.length - 1].closest('div[role="button"], button');
-                            if(btn) { btn.click(); }
-                        }
-                    })();""")
-                    print(f"✅ Account {account_num}: Repost Popup successfully closed!")
-                    
-                await asyncio.sleep(1)
-            except Exception as e: 
-                print(f"❌ Account {account_num} Repost Error: {e}")
+                    await page.evaluate("""(() => { let closeBtns = document.querySelectorAll('svg[aria-label="Close"]'); if(closeBtns.length > 0) { let btn = closeBtns[closeBtns.length - 1].closest('div[role="button"], button'); if(btn) { btn.click(); } } })();""")
+            except Exception: pass
 
         async def do_comment():
             try:
                 print(f"💬 Account {account_num}: Trying to Comment...")
-                icon_clicked = await page.evaluate("""(() => {
-                    let s = document.querySelectorAll('svg[aria-label="Comment"]');
-                    if(s.length>0) { 
-                        let b = s[0].closest('div[role="button"], button, a'); 
-                        if(b) { b.click(); return true; }
-                    }
-                    return false;
-                })();""")
-                
-                if not icon_clicked:
-                    print(f"⚠️ Account {account_num}: Comment icon nahi mila.")
-                    return
+                icon_clicked = await page.evaluate("""(() => { let s = document.querySelectorAll('svg[aria-label="Comment"]'); if(s.length>0) { let b = s[0].closest('div[role="button"], button, a'); if(b) { b.click(); return true; } } return false; })();""")
+                if not icon_clicked: return
 
                 await asyncio.sleep(3) 
-                
-                box_focused = await page.evaluate("""(() => {
-                    let box = document.querySelector('textarea[aria-label*="comment" i], div[role="textbox"], input[placeholder*="comment" i], textarea[placeholder*="comment" i]');
-                    if(box) { 
-                        box.focus(); 
-                        box.click(); 
-                        return true; 
-                    }
-                    return false;
-                })();""")
+                box_focused = await page.evaluate("""(() => { let box = document.querySelector('textarea[aria-label*="comment" i], div[role="textbox"], input[placeholder*="comment" i], textarea[placeholder*="comment" i]'); if(box) { box.focus(); box.click(); return true; } return false; })();""")
                 
                 if box_focused:
                     await asyncio.sleep(1)
                     await page.keyboard.type(current_comment, delay=150)
                     await asyncio.sleep(1)
-                    
-                    # 🚀 NAYA 100% CONFIRM INSPECT ELEMENT LOGIC 
-                    posted_via_js = await page.evaluate("""(() => {
-                        let elements = document.querySelectorAll('div[role="button"]');
-                        for(let el of elements) {
-                            if(el.textContent && el.textContent.trim() === 'Post') {
-                                el.click();
-                                return true;
-                            }
-                        }
-                        return false;
-                    })();""")
-                    
-                    if posted_via_js:
-                        print(f"✅ Account {account_num}: 'Post' button clicked successfully via EXACT element logic!")
-                    else:
-                        print(f"⚠️ Account {account_num}: JS fail hua, Playwright Native Click try kar raha hu...")
-                        try:
-                            # Exact match locator based on your inspect element
-                            post_locator = page.locator('div[role="button"]:text-is("Post")')
-                            if await post_locator.count() > 0:
-                                await post_locator.last.click(timeout=3000)
-                                print(f"✅ Account {account_num}: Posted via Playwright Native Click!")
-                        except Exception as inner_e:
-                            print(f"❌ Account {account_num} dono method se Post button click nahi hua.")
-                        
-                else:
-                    print(f"⚠️ Account {account_num}: Comment box detect nahi hua.")
-                    
-                await asyncio.sleep(4)
-            except Exception as e: 
-                print(f"❌ Account {account_num} Comment fail hua: {e}")
+                    posted_via_js = await page.evaluate("""(() => { let elements = document.querySelectorAll('div[role="button"]'); for(let el of elements) { if(el.textContent && el.textContent.trim() === 'Post') { el.click(); return true; } } return false; })();""")
+                    if not posted_via_js:
+                        post_locator = page.locator('div[role="button"]:text-is("Post")')
+                        if await post_locator.count() > 0: await post_locator.last.click(timeout=3000)
+            except Exception: pass
 
-        # --- RANDOMIZE WORKFLOW ORDER ---
-        actions = [
-            ("Like", do_like),
-            ("Save", do_save),
-            ("Repost", do_repost),
-            ("Comment", do_comment)
-        ]
+        actions = [("Like", do_like), ("Save", do_save), ("Repost", do_repost), ("Comment", do_comment)]
         random.shuffle(actions) 
         
-        print(f"🎲 Account {account_num} Random Action Order:", [a[0] for a in actions])
+        print(f"🎲 Account {account_num} Action Order: {[a[0] for a in actions]}")
         for name, action in actions:
             await action()
             await asyncio.sleep(random.uniform(1, 3)) 
 
         print(f"✅ Account {account_num}: Saare Actions Done!")
 
-        # --- EXACT 75th SECOND SCREENSHOT LOGIC ---
+        # --- Screenshot at exact 75th sec ---
         elapsed = time.time() - start_time
         wait_for_75 = 75 - elapsed
-        if wait_for_75 > 0:
-            print(f"⏳ Account {account_num}: 75s mark tak pahunchne ke liye {int(wait_for_75)}s aur ruk raha hu...")
-            await asyncio.sleep(wait_for_75)
+        if wait_for_75 > 0: await asyncio.sleep(wait_for_75)
             
         screenshot_path = f"proof_{account_num}.png"
         await page.screenshot(path=screenshot_path)
-        print(f"📸 Account {account_num}: 75th Second par Screenshot liya! Telegram par bhej raha hu...")
-        await send_screenshot(screenshot_path, f"✅ Account {account_num} ka kaam aur 75s ka proof!\n📝 Comment: {current_comment}")
+        print(f"📸 Account {account_num}: Telegram par proof bhej raha hu...")
+        await send_screenshot(screenshot_path, f"✅ Account {account_num} Kaam Done!\n📝 AI Comment: {current_comment}")
 
-        # --- RANDOM EXIT BETWEEN 80 to 90 SECONDS ---
+        # --- Random exit logic ---
         exit_time_target = random.randint(80, 90)
-        elapsed_now = time.time() - start_time
-        wait_for_exit = exit_time_target - elapsed_now
-        
-        if wait_for_exit > 0: 
-            print(f"⏳ Account {account_num}: Final Random Exit ke liye {int(wait_for_exit)} seconds bache hain...")
-            await asyncio.sleep(wait_for_exit)
+        wait_for_exit = exit_time_target - (time.time() - start_time)
+        if wait_for_exit > 0: await asyncio.sleep(wait_for_exit)
             
-    except Exception as e: print(f"Error in Account {account_num}:", e)
+    except Exception as e: print(f"❌ Error in Account {account_num}:", e)
     finally:
-        total_time_spent = int(time.time() - start_time) if 'start_time' in locals() else 0
-        print(f"🏁 Account {account_num} session closed after ~{total_time_spent} seconds.")
         await context.close()
 
 async def main():
     async with async_playwright() as p:
-        # Browser launch ek hi baar hoga
         browser = await p.chromium.launch(channel="chrome", headless=True, args=["--start-maximized"])
+        print("\n🚀 Accounts ko ab EK SATH (Parallel) start kar rahe hain...\n")
         
-        print("\n🚀 Accounts ko ab EK SATH (Paralell) start kar rahe hain...\n")
-        
-        tasks = [] # Dono tasks ko ek list me daalenge
-        
-        if C1_B64:
-            tasks.append(process_account(browser, C1_B64, 1))
-            
-        if C2_B64:
-            tasks.append(process_account(browser, C2_B64, 2))
+        tasks = []
+        if C1_B64: tasks.append(process_account(browser, C1_B64, 1))
+        if C2_B64: tasks.append(process_account(browser, C2_B64, 2))
             
         if not tasks:
             print("⚠️ Koi cookie provide nahi ki gayi hai!")
         else:
-            # ⚡ asyncio.gather saare tasks ko aage-piche nahi, balki EXACT ek time par fire karta hai
-            await asyncio.gather(*tasks)
+            await asyncio.gather(*tasks) # Parallel execution
             
         print("\n🏆 SAARE ACCOUNTS KA KAAM SUCCESSFULLY COMPLETE HO GAYA!")
         await browser.close()
